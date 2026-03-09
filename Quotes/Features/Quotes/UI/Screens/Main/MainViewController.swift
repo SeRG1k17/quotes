@@ -21,7 +21,14 @@ final class MainViewController: UIViewController {
 
     private let tableView = {
         let tableView = UITableView(frame: .zero, style: .plain)
-        tableView.separatorStyle = .none
+        tableView.separatorStyle = .singleLine
+        tableView.separatorColor = .color.quoteListSeparator
+        tableView.separatorInset = UIEdgeInsets(
+            top: 0,
+            left: QuoteTableViewCell.Metrics.horizontalInset,
+            bottom: 0,
+            right: 0
+        )
         tableView.backgroundColor = .color.white
         tableView.showsVerticalScrollIndicator = false
         tableView.contentInset = .zero

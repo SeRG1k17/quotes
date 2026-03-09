@@ -11,15 +11,17 @@ import UIKit
 @MainActor
 final class QuoteTableViewCell: UITableViewCell, ReusableCell {
     enum Metrics {
-        static let rowHeight: CGFloat = 73
+        static let rowHeight: CGFloat = 60
         static let horizontalInset: CGFloat = 14
-        static let iconSize: CGFloat = 18
+        static let iconSize: CGFloat = 24
         static let iconToTextSpacing: CGFloat = 7
         static let columnsSpacing: CGFloat = 10
         static let rightInset: CGFloat = 3
-        static let topRowCenterYOffset: CGFloat = -10
-        static let bottomRowCenterYOffset: CGFloat = 10
-        static let percentFlashHoldDuration: TimeInterval = 2
+        static let contentVerticalInset: CGFloat = 7
+        static let rowsSpacing: CGFloat = 3
+        static let badgeHorizontalPadding: CGFloat = 1
+        static let badgeVerticalPadding: CGFloat = 1
+        static let flashHoldDuration: TimeInterval = 2
     }
 
     private let logoImageView = UIImageView()
@@ -30,11 +32,9 @@ final class QuoteTableViewCell: UITableViewCell, ReusableCell {
     private let percentLabel = PaddingLabel()
     private let valueLabel = UILabel()
 
-    private let separatorView = UIView()
-
     private var representedSymbol = ""
-    private var percentFlashResetWorkItem: DispatchWorkItem?
-    private var isPercentFlashActive = false
+    private var flashResetWorkItem: DispatchWorkItem?
+    private var isFlashActive = false
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -63,9 +63,9 @@ final class QuoteTableViewCell: UITableViewCell, ReusableCell {
 
 private extension QuoteTableViewCell {
     func resetFlashState() {
-        percentFlashResetWorkItem?.cancel()
-        percentFlashResetWorkItem = nil
-        isPercentFlashActive = false
+        flashResetWorkItem?.cancel()
+        flashResetWorkItem = nil
+        isFlashActive = false
         percentLabel.backgroundColor = .color.clear
         percentLabel.textColor = QuoteDirectionAppearance.forDirection(.neutral).textColor
         percentLabel.layer.removeAllAnimations()
@@ -91,16 +91,13 @@ private extension QuoteTableViewCell {
         setupIconUI()
         setupLabelsUI()
 
-        separatorView.backgroundColor = .color.quoteListSeparator
-
         contentView.addSubviews(
             logoImageView,
             fallbackIconLabel,
             symbolLabel,
             subtitleLabel,
             percentLabel,
-            valueLabel,
-            separatorView
+            valueLabel
         )
 
         setupConstraints()
@@ -130,12 +127,17 @@ private extension QuoteTableViewCell {
         subtitleLabel.textColor = .color.quoteListSubtitleText
         subtitleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        percentLabel.font = .systemFont(ofSize: 15, weight: .semibold)
-        percentLabel.textAlignment = .right
+        percentLabel.font = .systemFont(ofSize: 17, weight: .semibold)
+        percentLabel.textAlignment = .center
         percentLabel.layer.cornerRadius = 7
         percentLabel.layer.masksToBounds = true
         percentLabel.backgroundColor = .color.clear
-        percentLabel.insets = UIEdgeInsets(top: 1, left: 7, bottom: 1, right: 7)
+        percentLabel.insets = UIEdgeInsets(
+            top: Metrics.badgeVerticalPadding,
+            left: Metrics.badgeHorizontalPadding,
+            bottom: Metrics.badgeVerticalPadding,
+            right: Metrics.badgeHorizontalPadding
+        )
         percentLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         percentLabel.setContentHuggingPriority(.required, for: .horizontal)
 
@@ -159,12 +161,13 @@ private extension QuoteTableViewCell {
 
         percentLabel.snp.makeConstraints {
             $0.trailing.equalToSuperview().inset(Metrics.rightInset)
-            $0.centerY.equalToSuperview().offset(Metrics.topRowCenterYOffset)
+            $0.top.equalToSuperview().inset(Metrics.contentVerticalInset)
         }
 
         valueLabel.snp.makeConstraints {
             $0.trailing.equalTo(percentLabel)
-            $0.centerY.equalToSuperview().offset(Metrics.bottomRowCenterYOffset)
+            $0.bottom.equalToSuperview().inset(Metrics.contentVerticalInset)
+            $0.top.greaterThanOrEqualTo(percentLabel.snp.bottom).offset(Metrics.rowsSpacing)
         }
 
         symbolLabel.snp.makeConstraints {
@@ -177,13 +180,6 @@ private extension QuoteTableViewCell {
             $0.leading.equalTo(symbolLabel)
             $0.trailing.lessThanOrEqualTo(valueLabel.snp.leading).offset(-Metrics.columnsSpacing)
             $0.centerY.equalTo(valueLabel.snp.centerY)
-        }
-
-        separatorView.snp.makeConstraints {
-            $0.leading.equalToSuperview().inset(Metrics.horizontalInset)
-            $0.trailing.equalToSuperview()
-            $0.bottom.equalToSuperview()
-            $0.height.equalTo(1 / UIScreen.main.scale)
         }
     }
 
@@ -203,20 +199,20 @@ private extension QuoteTableViewCell {
 
     func applyDirectionStyle(_ direction: QuoteDirection) {
         let appearance = QuoteDirectionAppearance.forDirection(direction)
-        percentLabel.textColor = isPercentFlashActive ? .color.white : appearance.textColor
+        percentLabel.textColor = isFlashActive ? .color.white : appearance.textColor
     }
 
     func applyPriceFlash(flashDirection: QuoteDirection?, finalDirection: QuoteDirection, symbol: String) {
         guard let flashDirection else { return }
 
-        flashPercentBadge(
+        flashChangeBadge(
             for: flashDirection,
             finalDirection: finalDirection,
             symbol: symbol
         )
     }
 
-    func flashPercentBadge(
+    func flashChangeBadge(
         for changeDirection: QuoteDirection,
         finalDirection: QuoteDirection,
         symbol: String
@@ -224,9 +220,9 @@ private extension QuoteTableViewCell {
         let changeAppearance = QuoteDirectionAppearance.forDirection(changeDirection)
         let finalAppearance = QuoteDirectionAppearance.forDirection(finalDirection)
 
-        percentFlashResetWorkItem?.cancel()
-        percentFlashResetWorkItem = nil
-        isPercentFlashActive = true
+        flashResetWorkItem?.cancel()
+        flashResetWorkItem = nil
+        isFlashActive = true
         percentLabel.layer.removeAllAnimations()
         percentLabel.backgroundColor = changeAppearance.textColor
         percentLabel.textColor = .color.white
@@ -234,14 +230,14 @@ private extension QuoteTableViewCell {
         let resetWorkItem = DispatchWorkItem { [weak self] in
             guard let self, self.isRepresenting(symbol) else { return }
             self.percentLabel.backgroundColor = .color.clear
-            self.isPercentFlashActive = false
-            self.percentFlashResetWorkItem = nil
+            self.isFlashActive = false
+            self.flashResetWorkItem = nil
             self.percentLabel.textColor = finalAppearance.textColor
         }
 
-        percentFlashResetWorkItem = resetWorkItem
+        flashResetWorkItem = resetWorkItem
         DispatchQueue.main.asyncAfter(
-            deadline: .now() + Metrics.percentFlashHoldDuration,
+            deadline: .now() + Metrics.flashHoldDuration,
             execute: resetWorkItem
         )
     }
